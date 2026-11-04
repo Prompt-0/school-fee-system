@@ -1,6 +1,6 @@
 """
-Web-based Terminal Server for Delhi Public Academy Fee Management.
-Serves a self-contained in-browser terminal console connected to TerminalShell via REST.
+Web-based Real Terminal Server for Delhi Public Academy Fee Management.
+Serves an in-browser Linux/Bash terminal sandbox for students to tinker with the Python CLI project.
 """
 
 from __future__ import annotations
@@ -13,8 +13,7 @@ from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from typing import Optional, Any
 
-from school_fee_system.services import SchoolFeeService
-from web_terminal.shell import TerminalShell
+from web_terminal.shell import RealTerminalEngine, TerminalShell
 
 
 TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
@@ -23,12 +22,13 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0b0f17">
-<title>DPA Fee Console — Web Terminal</title>
+<title>Student Terminal Sandbox — Delhi Public Academy</title>
 <style>
   :root {
     --bg-window: #0b0f17;
     --bg-term: #0f172a;
     --bg-header: #1e293b;
+    --bg-sidebar: #131b2e;
     --text-main: #f8fafc;
     --text-muted: #94a3b8;
     --accent: #2dd4bf;
@@ -36,9 +36,9 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
     --prompt-user: #38bdf8;
     --prompt-host: #2dd4bf;
     --prompt-path: #facc15;
-    --border-color: #334155;
+    --border-color: #283548;
     --font-term: "Adwaita Mono", "Cascadia Code", "Fira Code", SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    --font-size: 14.5px;
+    --font-size: 14px;
   }
 
   /* Themes */
@@ -46,6 +46,7 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
     --bg-window: #000000;
     --bg-term: #050b05;
     --bg-header: #0a1f0a;
+    --bg-sidebar: #081408;
     --text-main: #22c55e;
     --text-muted: #15803d;
     --accent: #4ade80;
@@ -59,6 +60,7 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
     --bg-window: #0a0601;
     --bg-term: #120c02;
     --bg-header: #261705;
+    --bg-sidebar: #1a0f04;
     --text-main: #f59e0b;
     --text-muted: #b45309;
     --accent: #fbbf24;
@@ -72,6 +74,7 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
     --bg-window: #0b0214;
     --bg-term: #130324;
     --bg-header: #24053d;
+    --bg-sidebar: #1a0433;
     --text-main: #f43f5e;
     --text-muted: #9333ea;
     --accent: #06b6d4;
@@ -85,6 +88,7 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
     --bg-window: #242933;
     --bg-term: #2e3440;
     --bg-header: #3b4252;
+    --bg-sidebar: #2b303c;
     --text-main: #eceff4;
     --text-muted: #7b88a1;
     --accent: #88c0d0;
@@ -106,7 +110,7 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
     overflow: hidden;
   }
 
-  /* CRT Scanline Effect Overlay (Toggled via button) */
+  /* CRT Scanline Effect Overlay */
   .crt::after {
     content: " ";
     display: block;
@@ -119,14 +123,20 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
     opacity: 0.65;
   }
 
-  /* Main Container */
+  /* Split Layout: Terminal + Student Practice Lab Sidebar */
+  .app-container {
+    display: flex;
+    height: 100%;
+    width: 100%;
+  }
+
   .terminal-wrapper {
     display: flex;
     flex-direction: column;
+    flex: 1;
     height: 100%;
-    width: 100%;
-    max-width: 1400px;
-    margin: 0 auto;
+    min-width: 0;
+    position: relative;
   }
 
   /* Window Titlebar Header */
@@ -180,7 +190,7 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
   .header-actions {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.4rem;
   }
   .action-btn {
     background: transparent;
@@ -188,7 +198,7 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
     color: var(--text-muted);
     font-family: inherit;
     font-size: 0.72rem;
-    padding: 3px 8px;
+    padding: 4px 8px;
     border-radius: 5px;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -213,7 +223,7 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
   }
 
   .term-output {
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.6rem;
   }
   .term-output pre {
     font-family: inherit;
@@ -297,95 +307,288 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
     color: #000;
   }
 
-  /* History & Auto-complete suggestions popup */
-  .completion-bar {
-    color: var(--text-muted);
-    font-size: 0.8rem;
-    margin-bottom: 0.35rem;
-    font-style: italic;
+  /* Student Practice Lab Sidebar */
+  .lab-sidebar {
+    width: 340px;
+    background: var(--bg-sidebar);
+    border-left: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    transition: transform 0.25s ease;
+  }
+  @media (max-width: 860px) {
+    .lab-sidebar {
+      position: fixed;
+      top: 0; bottom: 0; right: 0;
+      z-index: 60;
+      transform: translateX(100%);
+      box-shadow: -5px 0 25px rgba(0, 0, 0, 0.5);
+    }
+    .lab-sidebar.open {
+      transform: translateX(0);
+    }
   }
 
-  /* Link styling inside terminal output */
-  .term-body a {
-    color: var(--accent);
-    text-decoration: underline;
+  .lab-header {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-header);
   }
+  .lab-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .lab-body {
+    padding: 1rem;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+
+  .mission-card {
+    background: var(--bg-term);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.75rem;
+  }
+  .mission-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 0.35rem;
+  }
+  .mission-desc {
+    font-size: 0.8rem;
+    color: var(--text-main);
+    margin-bottom: 0.5rem;
+    line-height: 1.35;
+  }
+  .mission-cmd {
+    background: #090d16;
+    border: 1px solid var(--border-color);
+    padding: 0.35rem 0.5rem;
+    border-radius: 5px;
+    font-size: 0.75rem;
+    color: #38bdf8;
+    word-break: break-all;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .btn-run {
+    background: var(--accent);
+    color: #0b0f17;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 2px 7px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .btn-run:hover { opacity: 0.9; }
 </style>
 </head>
 <body data-theme="teal">
-<div class="terminal-wrapper" id="terminalWrapper">
-  <!-- Window Header -->
-  <header class="term-header">
-    <div class="window-controls">
-      <span class="dot dot-red"></span>
-      <span class="dot dot-yellow"></span>
-      <span class="dot dot-green"></span>
-    </div>
-    <div class="term-title">
-      <span>dpa-admin@cbse-terminal: /opt/fee-system</span>
-      <span class="badge-live">● Online</span>
-    </div>
-    <div class="header-actions">
-      <button class="action-btn" id="themeBtn" title="Switch Theme">Palette ▾</button>
-      <button class="action-btn" id="crtBtn" title="Toggle CRT Scanline Effect">CRT: Off</button>
-      <a href="/" class="action-btn" style="text-decoration: none;" title="Open GUI Dashboard">GUI ↗</a>
-    </div>
-  </header>
 
-  <!-- Output Log Container -->
-  <main class="term-body" id="termBody" onclick="focusInput()">
-    <div id="termHistory"></div>
-    <div class="prompt-row" id="activePromptRow">
-      <span class="prompt-label">
-        <span class="prompt-user">admin</span><span class="prompt-at">@</span><span class="prompt-host">dpa-terminal</span><span class="prompt-colon">:</span><span class="prompt-path">~</span><span class="prompt-symbol">$</span>
-      </span>
-      <div class="input-wrapper">
-        <input type="text" id="termInput" class="term-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" autofocus />
+<div class="app-container">
+  <!-- Terminal Console -->
+  <div class="terminal-wrapper" id="terminalWrapper">
+    <!-- Window Header -->
+    <header class="term-header">
+      <div class="window-controls">
+        <span class="dot dot-red"></span>
+        <span class="dot dot-yellow"></span>
+        <span class="dot dot-green"></span>
+      </div>
+      <div class="term-title">
+        <span id="titleText">student@dpa-box: ~/school-fee-system — bash</span>
+        <span class="badge-live">● Sandbox Live</span>
+      </div>
+      <div class="header-actions">
+        <button class="action-btn" id="themeBtn" title="Switch Theme">Palette ▾</button>
+        <button class="action-btn" id="crtBtn" title="Toggle CRT Scanlines">CRT: Off</button>
+        <button class="action-btn" id="labToggleBtn" onclick="toggleLab()">Missions 📖</button>
+        <a href="/" class="action-btn" style="text-decoration: none;" title="Open GUI Dashboard">GUI ↗</a>
+      </div>
+    </header>
+
+    <!-- Output Log Container -->
+    <main class="term-body" id="termBody" onclick="focusInput()">
+      <div id="termHistory"></div>
+      <div class="prompt-row" id="activePromptRow">
+        <span class="prompt-label" id="currentPromptLabel">
+          <span class="prompt-user">student</span><span class="prompt-at">@</span><span class="prompt-host">dpa-box</span><span class="prompt-colon">:</span><span class="prompt-path" id="promptPath">~/school-fee-system</span><span class="prompt-symbol">$</span>
+        </span>
+        <div class="input-wrapper">
+          <input type="text" id="termInput" class="term-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" autofocus />
+        </div>
+      </div>
+    </main>
+
+    <!-- Mobile Quick Touch Pill Bar -->
+    <nav class="touch-bar">
+      <button class="touch-pill" onclick="handleTouchAction('TAB')">⇥ TAB</button>
+      <button class="touch-pill" onclick="handleTouchAction('UP')">↑</button>
+      <button class="touch-pill" onclick="handleTouchAction('DOWN')">↓</button>
+      <button class="touch-pill" onclick="runDirectCmd('ls -la')">ls -la</button>
+      <button class="touch-pill" onclick="runDirectCmd('python -m school_fee_system --help')">--help</button>
+      <button class="touch-pill" onclick="runDirectCmd('python -m school_fee_system students list')">students</button>
+      <button class="touch-pill" onclick="runDirectCmd('python -m school_fee_system invoices list')">invoices</button>
+      <button class="touch-pill" onclick="runDirectCmd('python -m school_fee_system defaulters')">defaulters</button>
+      <button class="touch-pill" onclick="runDirectCmd('python -m unittest discover tests')">run tests</button>
+      <button class="touch-pill" onclick="runDirectCmd('clear')">clear</button>
+    </nav>
+  </div>
+
+  <!-- Student Practice Lab Missions Sidebar -->
+  <aside class="lab-sidebar" id="labSidebar">
+    <div class="lab-header">
+      <span class="lab-title">🎓 Student Missions Lab</span>
+      <button class="action-btn" onclick="toggleLab(false)">✕ Close</button>
+    </div>
+    <div class="lab-body">
+      <div class="mission-card">
+        <div class="mission-header"><span>Mission 1</span> <span>Filesystem</span></div>
+        <div class="mission-desc">Check out the project directory structure and files.</div>
+        <div class="mission-cmd">
+          <code>ls -la</code>
+          <button class="btn-run" onclick="runDirectCmd('ls -la')">▶ Run</button>
+        </div>
+      </div>
+
+      <div class="mission-card">
+        <div class="mission-header"><span>Mission 2</span> <span>CLI Help</span></div>
+        <div class="mission-desc">Explore the CLI entrypoint commands and options.</div>
+        <div class="mission-cmd">
+          <code>python -m school_fee_system --help</code>
+          <button class="btn-run" onclick="runDirectCmd('python -m school_fee_system --help')">▶ Run</button>
+        </div>
+      </div>
+
+      <div class="mission-card">
+        <div class="mission-header"><span>Mission 3</span> <span>Pupils</span></div>
+        <div class="mission-desc">List all 43 active students in Delhi Public Academy.</div>
+        <div class="mission-cmd">
+          <code>python -m school_fee_system students list</code>
+          <button class="btn-run" onclick="runDirectCmd('python -m school_fee_system students list')">▶ Run</button>
+        </div>
+      </div>
+
+      <div class="mission-card">
+        <div class="mission-header"><span>Mission 4</span> <span>Invoices</span></div>
+        <div class="mission-desc">Inspect generated student billing and fee invoices.</div>
+        <div class="mission-cmd">
+          <code>python -m school_fee_system invoices list</code>
+          <button class="btn-run" onclick="runDirectCmd('python -m school_fee_system invoices list')">▶ Run</button>
+        </div>
+      </div>
+
+      <div class="mission-card">
+        <div class="mission-header"><span>Mission 5</span> <span>Defaulters</span></div>
+        <div class="mission-desc">Find accounts overdue past their 21-day grace period.</div>
+        <div class="mission-cmd">
+          <code>python -m school_fee_system defaulters</code>
+          <button class="btn-run" onclick="runDirectCmd('python -m school_fee_system defaulters')">▶ Run</button>
+        </div>
+      </div>
+
+      <div class="mission-card">
+        <div class="mission-header"><span>Mission 6</span> <span>Record Payment</span></div>
+        <div class="mission-desc">Collect ₹5,000 for Invoice #1 via UPI and issue receipt.</div>
+        <div class="mission-cmd">
+          <code>python -m school_fee_system payments record --invoice-id 1 --amount 5000 --method UPI</code>
+          <button class="btn-run" onclick="runDirectCmd('python -m school_fee_system payments record --invoice-id 1 --amount 5000 --method UPI')">▶ Run</button>
+        </div>
+      </div>
+
+      <div class="mission-card">
+        <div class="mission-header"><span>Mission 7</span> <span>Audit Receipt</span></div>
+        <div class="mission-desc">Verify cryptographic SHA-256 digital security seal.</div>
+        <div class="mission-cmd">
+          <code>python -m school_fee_system receipts verify REC-2026-0001</code>
+          <button class="btn-run" onclick="runDirectCmd('python -m school_fee_system receipts verify REC-2026-0001')">▶ Run</button>
+        </div>
+      </div>
+
+      <div class="mission-card">
+        <div class="mission-header"><span>Mission 8</span> <span>Run Tests</span></div>
+        <div class="mission-desc">Execute all 20 automated unit tests using unittest.</div>
+        <div class="mission-cmd">
+          <code>python -m unittest discover tests</code>
+          <button class="btn-run" onclick="runDirectCmd('python -m unittest discover tests')">▶ Run</button>
+        </div>
+      </div>
+
+      <div class="mission-card">
+        <div class="mission-header"><span>Mission 9</span> <span>Python Script</span></div>
+        <div class="mission-desc">Write and run your own custom Python one-liner!</div>
+        <div class="mission-cmd">
+          <code>python -c "import school_fee_system; print('Python Ready!')"</code>
+          <button class="btn-run" onclick="runDirectCmd('python -c &quot;import school_fee_system; print(\'Python Ready!\')&quot;')">▶ Run</button>
+        </div>
       </div>
     </div>
-  </main>
-
-  <!-- Mobile Quick Touch Pill Bar -->
-  <nav class="touch-bar">
-    <button class="touch-pill" onclick="handleTouchAction('TAB')">⇥ TAB</button>
-    <button class="touch-pill" onclick="handleTouchAction('UP')">↑</button>
-    <button class="touch-pill" onclick="handleTouchAction('DOWN')">↓</button>
-    <button class="touch-pill" onclick="runDirectCmd('help')">help</button>
-    <button class="touch-pill" onclick="runDirectCmd('kpis')">kpis</button>
-    <button class="touch-pill" onclick="runDirectCmd('students list')">students</button>
-    <button class="touch-pill" onclick="runDirectCmd('invoices list')">invoices</button>
-    <button class="touch-pill" onclick="runDirectCmd('defaulters')">defaulters</button>
-    <button class="touch-pill" onclick="runDirectCmd('reports collection')">revenue</button>
-    <button class="touch-pill" onclick="runDirectCmd('clear')">clear</button>
-  </nav>
+  </aside>
 </div>
 
 <script>
-// Available commands for auto-completion
 const AUTO_COMMANDS = [
-  "help", "kpis", "students", "students list", "students view", 
-  "invoices", "invoices list", "invoices view", "invoices generate",
-  "pay", "receipts", "receipts view", "receipts verify",
-  "defaulters", "reports", "reports collection", "classes",
-  "theme", "theme teal", "theme matrix", "theme amber", "theme nord", "theme cyberpunk",
-  "clear", "banner", "version"
+  "ls -la", "pwd", "cat README.md", "cd src", "cd ..", "cd ~",
+  "python -m school_fee_system --help",
+  "python -m school_fee_system students list",
+  "python -m school_fee_system invoices list",
+  "python -m school_fee_system defaulters",
+  "python -m school_fee_system reports collection",
+  "python -m school_fee_system payments record --invoice-id 1 --amount 5000 --method UPI",
+  "python -m school_fee_system receipts view REC-2026-0001",
+  "python -m school_fee_system receipts verify REC-2026-0001",
+  "python -m unittest discover tests",
+  "reset-db", "clear", "help"
 ];
 
 const THEMES = ["teal", "matrix", "amber", "nord", "cyberpunk"];
 let currentThemeIdx = 0;
 
-// Command history memory
-let history = JSON.parse(localStorage.getItem("term_history") || "[]");
+let history = JSON.parse(localStorage.getItem("real_term_history") || "[]");
 let historyIndex = history.length;
+
+let currentCwd = "~/school-fee-system";
 
 const termBody = document.getElementById("termBody");
 const termHistory = document.getElementById("termHistory");
 const termInput = document.getElementById("termInput");
 const themeBtn = document.getElementById("themeBtn");
 const crtBtn = document.getElementById("crtBtn");
+const promptPath = document.getElementById("promptPath");
+const titleText = document.getElementById("titleText");
+const labSidebar = document.getElementById("labSidebar");
 
 function focusInput() {
   termInput.focus();
+}
+
+function toggleLab(state) {
+  if (state !== undefined) {
+    labSidebar.classList.toggle("open", state);
+  } else {
+    labSidebar.classList.toggle("open");
+  }
 }
 
 // Convert ANSI escape sequences to styled HTML
@@ -393,13 +596,11 @@ function ansiToHtml(text) {
   let out = "";
   let openSpans = 0;
   
-  // Replace HTML special characters first
   let escaped = text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 
-  // Regex to match ANSI escape codes: \033[...m
   const regex = /\x1B\[([0-9;]+)m/g;
   let lastIdx = 0;
   let match;
@@ -410,7 +611,6 @@ function ansiToHtml(text) {
     
     const codes = match[1].split(";");
     if (codes[0] === "0" || codes[0] === "") {
-      // Reset all
       while (openSpans > 0) {
         out += "</span>";
         openSpans--;
@@ -422,33 +622,31 @@ function ansiToHtml(text) {
       out += '<span style="opacity: 0.65;">';
       openSpans++;
     } else if (codes[0] === "31") {
-      out += '<span style="color: #ef4444; font-weight: 600;">'; // Red
+      out += '<span style="color: #ef4444; font-weight: 600;">';
       openSpans++;
     } else if (codes[0] === "32") {
-      out += '<span style="color: #22c55e; font-weight: 600;">'; // Green
+      out += '<span style="color: #22c55e; font-weight: 600;">';
       openSpans++;
     } else if (codes[0] === "33") {
-      out += '<span style="color: #facc15; font-weight: 600;">'; // Yellow
+      out += '<span style="color: #facc15; font-weight: 600;">';
       openSpans++;
     } else if (codes[0] === "34") {
-      out += '<span style="color: #38bdf8;">'; // Blue
+      out += '<span style="color: #38bdf8;">';
       openSpans++;
     } else if (codes[0] === "35") {
-      out += '<span style="color: #c084fc;">'; // Magenta
+      out += '<span style="color: #c084fc;">';
       openSpans++;
     } else if (codes[0] === "36") {
-      out += '<span style="color: #2dd4bf;">'; // Cyan / Teal
+      out += '<span style="color: #2dd4bf;">';
       openSpans++;
     } else if (codes[0] === "37") {
-      out += '<span style="color: #f8fafc;">'; // White
+      out += '<span style="color: #f8fafc;">';
       openSpans++;
     } else if (codes[0] === "38" && codes[1] === "2") {
-      // 24-bit TrueColor: \033[38;2;r;g;bm
       const r = codes[2], g = codes[3], b = codes[4];
       out += `<span style="color: rgb(${r}, ${g}, ${b});">`;
       openSpans++;
     } else if (codes[0] === "48" && codes[1] === "2") {
-      // 24-bit TrueColor background: \033[48;2;r;g;bm
       const r = codes[2], g = codes[3], b = codes[4];
       out += `<span style="background-color: rgb(${r}, ${g}, ${b}); padding: 1px 4px; border-radius: 3px;">`;
       openSpans++;
@@ -463,71 +661,45 @@ function ansiToHtml(text) {
   return out;
 }
 
-// Append command and response to terminal view
-function appendToTerminal(cmd, output) {
-  const block = document.createElement("div");
-  block.className = "term-output";
+function escapeHtml(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 
-  let promptHtml = `
-    <div class="prompt-row" style="margin-bottom: 2px;">
-      <span class="prompt-label">
-        <span class="prompt-user">admin</span><span class="prompt-at">@</span><span class="prompt-host">dpa-terminal</span><span class="prompt-colon">:</span><span class="prompt-path">~</span><span class="prompt-symbol">$</span>
-      </span>
-      <span style="font-weight: 600; color: #ffffff; margin-left: 0.35rem;">${escapeHtml(cmd)}</span>
-    </div>
-  `;
-
+function appendToTerminal(cmd, output, pathStr) {
   if (output === "\033[2J\033[H") {
-    // Clear screen command
     termHistory.innerHTML = "";
     termBody.scrollTop = 0;
     return;
   }
+
+  const block = document.createElement("div");
+  block.className = "term-output";
+
+  let displayCwd = pathStr || currentCwd;
+  let promptHtml = `
+    <div class="prompt-row" style="margin-bottom: 2px;">
+      <span class="prompt-label">
+        <span class="prompt-user">student</span><span class="prompt-at">@</span><span class="prompt-host">dpa-box</span><span class="prompt-colon">:</span><span class="prompt-path">${displayCwd}</span><span class="prompt-symbol">$</span>
+      </span>
+      <span style="font-weight: 600; color: #ffffff; margin-left: 0.35rem;">${escapeHtml(cmd)}</span>
+    </div>
+  `;
 
   block.innerHTML = promptHtml + `<pre>${ansiToHtml(output)}</pre>`;
   termHistory.appendChild(block);
   termBody.scrollTop = termBody.scrollHeight;
 }
 
-function escapeHtml(text) {
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-// Execute command via REST API
 async function executeCommand(cmdStr) {
   const trimmed = cmdStr.trim();
   if (!trimmed) return;
 
-  // Add to history
   if (history[history.length - 1] !== trimmed) {
     history.push(trimmed);
     if (history.length > 100) history.shift();
-    localStorage.setItem("term_history", JSON.stringify(history));
+    localStorage.setItem("real_term_history", JSON.stringify(history));
   }
   historyIndex = history.length;
-
-  // Check client-side direct commands
-  const tokens = trimmed.split(/\s+/);
-  const root = tokens[0].toLowerCase();
-
-  if (root === "clear" || root === "cls") {
-    termHistory.innerHTML = "";
-    termInput.value = "";
-    termBody.scrollTop = 0;
-    return;
-  }
-
-  if (root === "theme") {
-    if (tokens[1]) {
-      setTheme(tokens[1].toLowerCase());
-      appendToTerminal(trimmed, `\033[32m✓ Theme set to: ${tokens[1]}\033[0m\n`);
-    } else {
-      cycleTheme();
-      appendToTerminal(trimmed, `\033[32m✓ Switched theme to: ${document.body.getAttribute("data-theme")}\033[0m\n`);
-    }
-    termInput.value = "";
-    return;
-  }
 
   try {
     const res = await fetch("/api/exec", {
@@ -536,16 +708,25 @@ async function executeCommand(cmdStr) {
       body: JSON.stringify({ cmd: trimmed })
     });
     const data = await res.json();
-    appendToTerminal(trimmed, data.output || "");
+    
+    if (data.prompt && data.prompt.path) {
+      currentCwd = data.prompt.path;
+      promptPath.textContent = currentCwd;
+      titleText.textContent = `student@dpa-box: ${currentCwd} — bash`;
+    }
+
+    appendToTerminal(trimmed, data.output || "", currentCwd);
   } catch (err) {
-    appendToTerminal(trimmed, `\033[31mTerminal Network Error: ${err.message}\033[0m\n`);
+    appendToTerminal(trimmed, `\033[31mSandbox Error: ${err.message}\033[0m\n`, currentCwd);
   }
+
   termInput.value = "";
   termBody.scrollTop = termBody.scrollHeight;
 }
 
-function runDirectCmd(c) {
-  executeCommand(c);
+function runDirectCmd(cmd) {
+  termInput.value = cmd;
+  executeCommand(cmd);
   focusInput();
 }
 
@@ -581,13 +762,11 @@ function triggerTabCompletion() {
   if (matches.length === 1) {
     termInput.value = matches[0] + " ";
   } else if (matches.length > 1) {
-    // Show match suggestions
     const suggestionText = "\n\033[38;2;148;163;184mSuggestions:\033[0m\n  " + matches.join("   ") + "\n";
-    appendToTerminal(current, suggestionText);
+    appendToTerminal(current, suggestionText, currentCwd);
   }
 }
 
-// Keyboard navigation
 termInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
@@ -603,7 +782,7 @@ termInput.addEventListener("keydown", (e) => {
     triggerTabCompletion();
   } else if (e.key === "c" && e.ctrlKey) {
     e.preventDefault();
-    appendToTerminal(termInput.value, "^C\n");
+    appendToTerminal(termInput.value, "^C\n", currentCwd);
     termInput.value = "";
   } else if (e.key === "l" && e.ctrlKey) {
     e.preventDefault();
@@ -612,7 +791,6 @@ termInput.addEventListener("keydown", (e) => {
   }
 });
 
-// Theme Management
 function setTheme(name) {
   if (THEMES.includes(name)) {
     document.body.setAttribute("data-theme", name);
@@ -628,7 +806,6 @@ function cycleTheme() {
 
 themeBtn.onclick = () => cycleTheme();
 
-// CRT scanline toggle
 crtBtn.onclick = () => {
   const wrapper = document.getElementById("terminalWrapper");
   const isCrt = wrapper.classList.toggle("crt");
@@ -636,7 +813,6 @@ crtBtn.onclick = () => {
   localStorage.setItem("term_crt", isCrt ? "1" : "0");
 };
 
-// Initial boot
 window.onload = async () => {
   const savedTheme = localStorage.getItem("term_theme") || "teal";
   setTheme(savedTheme);
@@ -647,25 +823,16 @@ window.onload = async () => {
     crtBtn.textContent = "CRT: On";
   }
 
-  // Print startup welcome banner and KPIs
   try {
     const res = await fetch("/api/exec", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cmd: "banner" })
     });
-    const bannerData = await res.json();
-    
-    const kpiRes = await fetch("/api/exec", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cmd: "kpis" })
-    });
-    const kpiData = await kpiRes.json();
-
+    const data = await res.json();
     const initialBlock = document.createElement("div");
     initialBlock.className = "term-output";
-    initialBlock.innerHTML = `<pre>${ansiToHtml(bannerData.output || "")}${ansiToHtml(kpiData.output || "")}</pre>`;
+    initialBlock.innerHTML = `<pre>${ansiToHtml(data.output || "")}</pre>`;
     termHistory.appendChild(initialBlock);
   } catch (e) {
     // Fallback if offline
@@ -680,8 +847,8 @@ window.onload = async () => {
 
 
 class WebTerminalHandler(SimpleHTTPRequestHandler):
-    def __init__(self, *args, shell: TerminalShell, **kwargs):
-        self.shell = shell
+    def __init__(self, *args, engine: RealTerminalEngine, **kwargs):
+        self.engine = engine
         super().__init__(*args, **kwargs)
 
     def do_GET(self) -> None:
@@ -693,11 +860,6 @@ class WebTerminalHandler(SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
             self.wfile.write(TERMINAL_PAGE_HTML.encode("utf-8"))
-            return
-
-        if path == "/api/kpis":
-            kpis = self.shell.service.get_kpis()
-            self._send_json({k: str(v) if isinstance(v, Decimal) else v for k, v in kpis.items()})
             return
 
         self.send_error(HTTPStatus.NOT_FOUND, "Path not found.")
@@ -712,10 +874,10 @@ class WebTerminalHandler(SimpleHTTPRequestHandler):
             try:
                 data = json.loads(body)
                 cmd = data.get("cmd", "")
-                output = self.shell.execute(cmd)
-                self._send_json({"output": output, "status": "ok"})
+                result = self.engine.execute(cmd)
+                self._send_json(result)
             except Exception as exc:
-                self._send_json({"error": str(exc), "status": "error"}, status=HTTPStatus.BAD_REQUEST)
+                self._send_json({"error": str(exc), "exit_code": 1}, status=HTTPStatus.BAD_REQUEST)
             return
 
         self.send_error(HTTPStatus.NOT_FOUND, "API route not found.")
@@ -732,20 +894,19 @@ class WebTerminalHandler(SimpleHTTPRequestHandler):
 def run_terminal_server(
     host: Optional[str] = None,
     port: Optional[int] = None,
-    db_path: Optional[str] = None,
+    project_root: Optional[str] = None,
 ) -> None:
     host = host or os.environ.get("HOST", "127.0.0.1")
     if port is None:
         port = int(os.environ.get("PORT", 8080))
 
-    service = SchoolFeeService(db_path=db_path)
-    shell = TerminalShell(service=service)
+    engine = RealTerminalEngine(project_root=project_root)
 
     def factory(*args, **kwargs):
-        return WebTerminalHandler(*args, shell=shell, **kwargs)
+        return WebTerminalHandler(*args, engine=engine, **kwargs)
 
     server = ThreadingHTTPServer((host, port), factory)
-    print(f"\n💻 Delhi Public Academy Web Terminal Console running at:")
+    print(f"\n💻 Delhi Public Academy Real Terminal Sandbox running at:")
     print(f"   👉 http://{host}:{port}/")
     print(f"   (Press Ctrl+C to stop the terminal server)\n")
     try:

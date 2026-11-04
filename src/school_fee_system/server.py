@@ -1630,10 +1630,10 @@ class FeeServerHandler(SimpleHTTPRequestHandler):
                     from web_terminal.shell import TerminalShell
 
                 if not hasattr(self, "_shell") or self._shell is None:
-                    self._shell = TerminalShell(service=self.service)
+                    self._shell = TerminalShell()
                 cmd = payload.get("cmd", "")
-                output = self._shell.execute(cmd)
-                self._send_json({"output": output, "status": "ok"})
+                result = self._shell.execute(cmd)
+                self._send_json(result)
                 return
 
             if path == "/api/students":

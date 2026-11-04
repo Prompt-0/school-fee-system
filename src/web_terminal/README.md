@@ -1,103 +1,67 @@
-# 💻 School Fee Management System — In-Browser Web Terminal
+# 💻 Student Developer Web Terminal Sandbox
 
-A self-contained, interactive **Web Terminal Console** for Delhi Public Academy's fee management and accounting system. 
-
-It provides a retro-modern CLI interface directly inside your web browser with real-time ANSI colors, tab completion, command history, mobile touch controls, and cryptographic receipt verification.
+An in-browser, interactive **Linux / Bash Terminal Sandbox** designed specifically for students and beginners to tinker with the School Fee Management System directly from any web browser without installing Python, Git, or dependencies locally.
 
 ---
 
-## ✨ Features
+## 🌟 Why This Exists (For Educators & Students)
 
-- **In-Browser Terminal**: Full keyboard navigation (`↑`/`↓` history, `Tab` completion, `Ctrl+L` clear, `Ctrl+C` cancel).
-- **Zero External Dependencies**: Powered by Python's built-in `http.server` and vanilla JavaScript with a fast custom ANSI escape sequence renderer.
-- **CBSE Accounting Suite**: Complete access to student records, quarterly fee invoices, payment processing, defaulter lists, and revenue analytics.
-- **Multiple Color Themes**:
-  - `teal` — Modern Fedora Dark Slate with Teal accent (Default)
-  - `matrix` — Phosphor Green on Onyx Black
-  - `amber` — Vintage Amber CRT
-  - `nord` — Arctic Frost & Slate Blue
-  - `cyberpunk` — Neon Cyan & Hot Magenta
-- **Retro CRT Mode**: Optional toggle for scanline and phosphor glow effect.
-- **Mobile Optimized**: Bottom touch bar with virtual keys (`TAB`, `↑`, `↓`, `kpis`, `students`, `invoices`, `pay`, `defaulters`) and 16px inputs to prevent auto-zooming.
+Setting up local development environments (Python versions, virtual environments, path variables, terminal shells) is often a friction point for students who are just starting to learn programming.
+
+This web terminal provides:
+1. **Immediate Access**: Open a web link on a laptop, tablet, or phone and instantly get a working bash terminal in `~/school-fee-system`.
+2. **Real CLI Execution**: Students run actual commands (`ls -la`, `cat README.md`, `python -m school_fee_system students list`, `python -m unittest discover tests`).
+3. **Student Missions Lab**: A built-in sidebar with guided interactive tasks. Every task has a **"▶ Run"** button that automatically pastes and executes the command in the terminal.
+4. **Zero Risk**: Students can experiment, create python test scripts, test fee collections, and run `reset-db` at any time to return the database to its pristine demo state.
 
 ---
 
-## 🚀 Running the Web Terminal
+## 🚀 How to Run the Web Terminal
 
-### Mode 1: Standalone Subproject Server (Port 8080)
+### Mode 1: Integrated in Cloud / Main Server (Default)
+When the main server is running:
+```bash
+python -m school_fee_system serve --port 8000
+```
+Open in browser:
+- **Local URL**: [http://127.0.0.1:8000/terminal](http://127.0.0.1:8000/terminal)
+- **Production Cloud URL**: [https://con-academy.onrender.com/terminal](https://con-academy.onrender.com/terminal)
+
+### Mode 2: Standalone Terminal Server (Port 8080)
 From the repository root:
 ```bash
 python -m web_terminal --port 8080
 ```
-Open your browser at:
+Open in browser:
 👉 **`http://127.0.0.1:8080/`**
 
-### Mode 2: Integrated with the Main Application (Port 8000 or Cloud)
-The Web Terminal is automatically mounted into the primary application server at the `/terminal` route:
-```bash
-python -m school_fee_system serve --port 8000
-```
-Open your browser at:
-👉 **`http://127.0.0.1:8000/terminal`**  
-*(or on Render: `https://con-academy.onrender.com/terminal`)*
-
 ---
 
-## 📖 Command Reference & Cheatsheet
+## 🎓 Guided Student Missions
 
-| Command | Arguments | Description |
+| Mission | Command | What the Student Learns |
 | :--- | :--- | :--- |
-| `help` | `[cmd]` | Displays the full manual or command-specific help |
-| `kpis` | — | Shows real-time financial metrics in an ASCII box (Active students, revenue, dues) |
-| `students list` | `[--class <id>] [--search <str>]` | Tabulates enrolled pupils with guardian contact and transport/hostel flags |
-| `students view` | `<student_id>` | Displays full student profile, billing ledger, and transaction history |
-| `invoices list` | `[--status <PAID/UNPAID/OVERDUE>]` | Lists invoices with due dates, gross amounts, and remaining balances |
-| `invoices view` | `<invoice_id_or_num>` | Displays itemized fee heads (Tuition, Lab, Transport) and concessions |
-| `invoices generate` | `<student_id> [term] [year]` | Generates a quarterly fee invoice for a student |
-| `pay` | `<inv_id> <amount> [method] [tx_id] [cashier]` | Records payment, updates balance, and prints official receipt |
-| `receipts view` | `<receipt_number>` | Displays ASCII receipt with SHA-256 digital security seal |
-| `receipts verify` | `<receipt_number>` | Cryptographically audits receipt authenticity against tampering |
-| `defaulters` | `[min_days]` | Lists all overdue accounts with days overdue and parent phone numbers |
-| `reports collection` | — | Revenue summary grouped by payment method (UPI, Cash, Cheque, etc.) |
-| `classes` | — | Lists all classes and section grade levels |
-| `theme` | `<teal \| matrix \| amber \| nord \| cyberpunk>` | Switches the terminal color palette live |
-| `banner` | — | Displays the official school crest ASCII banner |
-| `clear` | — | Clears the terminal output screen (`Ctrl+L`) |
+| **1. Explore Project Files** | `ls -la` | Understands directory structure (`src`, `tests`, `data`, `pyproject.toml`) |
+| **2. Check Current Path** | `pwd` | Understands Linux working directories |
+| **3. Read Project Docs** | `cat README.md` | Inspecting markdown and project requirements in terminal |
+| **4. Run Python CLI Help** | `python -m school_fee_system --help` | Understands Python module execution (`-m`) and CLI subcommands |
+| **5. List Enrolled Pupils** | `python -m school_fee_system students list` | Inspects database queries formatted as terminal tables |
+| **6. Check Invoices & Due Dates**| `python -m school_fee_system invoices list` | Sees financial ledger state and due dates |
+| **7. Identify Defaulters** | `python -m school_fee_system defaulters` | Inspects business logic for overdue grace periods |
+| **8. Collect Fee & Issue Receipt**| `python -m school_fee_system payments record --invoice-id 1 --amount 5000 --method UPI` | Runs transactions, updates balance, and prints ASCII receipt |
+| **9. Verify Digital Seal** | `python -m school_fee_system receipts verify REC-2026-0001` | Learns cryptographic SHA-256 integrity verification |
+| **10. Run Automated Tests** | `python -m unittest discover tests` | Understands Test-Driven Development (TDD) and test suites |
+| **11. Write First Python Script**| `echo "print(2 + 2)" > calc.py && python calc.py` | Creates and executes their own custom Python program |
+| **12. Reset Demo Database** | `reset-db` | Restores the CBSE 43-student database to fresh demo state |
 
 ---
 
-## 💡 Example Sessions
+## ⌨️ Terminal Shortcuts & Controls
 
-### 1. View School KPIs
-```text
-admin@dpa-terminal:~$ kpis
-┌────────────────────────────────────────────────────────────────────────┐
-│         DELHI PUBLIC ACADEMY — REAL-TIME FINANCIAL SUMMARY             │
-├──────────────────┬──────────────────┬──────────────────┬───────────────┤
-│ ACTIVE PUPILS    │ TOTAL COLLECTED  │ OUTSTANDING DUES │ DEFAULTERS      │
-│        43        │   ₹2,95,400.00   │   ₹642,800.00    │       6       │
-└──────────────────┴──────────────────┴──────────────────┴───────────────┘
-```
-
-### 2. Check Overdue Defaulters
-```text
-admin@dpa-terminal:~$ defaulters
-FEE DEFAULTERS LIST (6 overdue accounts):
-┌───────────────┬─────────────────┬───────────────────┬─────────────────┬────────────┬─────────┬─────────────┐
-│ Invoice #     │ Student Name    │ Class             │ Guardian Phone  │ Due Date   │ Overdue │ Balance Due │
-├───────────────┼─────────────────┼───────────────────┼─────────────────┼────────────┼─────────┼─────────────┤
-│ INV-2026-0004 │ Ananya Iyer     │ Class 10-A        │ +91 98440 45678 │ 2026-10-20 │ 16 days │  ₹20,975.00 │
-│ INV-2026-0011 │ Reyansh Gupta   │ Class 10-B        │ +91 98445 67890 │ 2026-10-20 │ 16 days │  ₹40,475.00 │
-...
-```
-
-### 3. Record UPI Fee Payment
-```text
-admin@dpa-terminal:~$ pay 4 20975.00 UPI UTR-882341901 Cashier-1
-✓ PAYMENT RECORDED SUCCESSFULLY!
-  Payment Ref   : PAY-2026-0008
-  Amount Credited: ₹20,975.00
-  Payment Mode  : UPI (Tx: UTR-882341901)
-  Receipt Issued: REC-2026-0008
-  Digital Seal  : 6f8e79b9a241e...
-```
+- **`Tab`**: Auto-completes commands and file paths.
+- **`↑` / `↓`**: Navigates through previous command history (persisted in `localStorage`).
+- **`Ctrl + L` / `clear`**: Clears the terminal screen.
+- **`Ctrl + C`**: Cancels current input buffer.
+- **`CRT: On/Off`**: Toggles retro CRT scanline phosphor effect.
+- **`Palette`**: Toggles color themes (`teal`, `matrix`, `amber`, `nord`, `cyberpunk`).
+- **Mobile Touch Bar**: Virtual buttons (`TAB`, `↑`, `↓`, `ls`, `--help`, `students`, `invoices`, `defaulters`) for phone touch typing.

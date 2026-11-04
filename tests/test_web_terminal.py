@@ -1,122 +1,81 @@
 """
-Unit tests for the Web Terminal Subproject (shell engine, ANSI table rendering, and commands).
+Unit tests for the Real Terminal Sandbox (web_terminal engine & CLI execution).
 """
 
 import os
-import tempfile
 import unittest
-from decimal import Decimal
 
-from school_fee_system.database import connect_db, initialize_schema, seed_sample_data
-from school_fee_system.models import FeeTerm
-from school_fee_system.services import SchoolFeeService
-from web_terminal.shell import TerminalShell, _strip_ansi, format_currency
+from web_terminal.shell import RealTerminalEngine, TerminalShell
 
 
-class TestWebTerminalShell(unittest.TestCase):
+class TestRealTerminalEngine(unittest.TestCase):
     def setUp(self):
-        self.temp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-        self.temp_db.close()
-        self.db_path = self.temp_db.name
-        self.service = SchoolFeeService(db_path=self.db_path)
-
-        conn = connect_db(self.db_path)
-        try:
-            initialize_schema(conn)
-            seed_sample_data(conn)
-        finally:
-            conn.close()
-
-        # Seed at least one invoice for testing
-        self.test_invoice = self.service.generate_student_invoice(
-            student_id="STU-2026-001",
-            academic_year="2026-2027",
-            term=FeeTerm.TERM_1,
-        )
-        self.shell = TerminalShell(service=self.service)
-
-    def tearDown(self):
-        try:
-            os.remove(self.db_path)
-        except OSError:
-            pass
+        # Point to the actual project repository
+        self.engine = RealTerminalEngine()
 
     def test_help_command(self):
-        output = self.shell.execute("help")
-        plain = _strip_ansi(output)
-        self.assertIn("AVAILABLE COMMANDS & CHEATSHEET", plain)
-        self.assertIn("students list", plain)
-        self.assertIn("defaulters", plain)
-        self.assertIn("invoices", plain)
+        res = self.engine.execute("help")
+        self.assertEqual(res["exit_code"], 0)
+        self.assertIn("STUDENT LAB CHEATSHEET", res["output"])
+        self.assertIn("python -m school_fee_system", res["output"])
 
-    def test_kpis_command(self):
-        output = self.shell.execute("kpis")
-        plain = _strip_ansi(output)
-        self.assertIn("DELHI PUBLIC ACADEMY", plain)
-        self.assertIn("ACTIVE PUPILS", plain)
-        self.assertIn("TOTAL COLLECTED", plain)
+    def test_ls_and_pwd(self):
+        res_ls = self.engine.execute("ls")
+        self.assertEqual(res_ls["exit_code"], 0)
+        self.assertIn("pyproject.toml", res_ls["output"])
+        self.assertIn("README.md", res_ls["output"])
 
-    def test_students_list(self):
-        output = self.shell.execute("students list")
-        plain = _strip_ansi(output)
-        self.assertIn("ENROLLED STUDENTS", plain)
-        self.assertIn("STU-2026-001", plain)
-        self.assertIn("Aarav Sharma", plain)
+        res_pwd = self.engine.execute("pwd")
+        self.assertEqual(res_pwd["exit_code"], 0)
+        self.assertIn(self.engine.project_root, res_pwd["output"])
 
-    def test_students_view(self):
-        output = self.shell.execute("students view STU-2026-001")
-        plain = _strip_ansi(output)
-        self.assertIn("STUDENT ACCOUNT STATEMENT: Aarav Sharma", plain)
-        self.assertIn("Billed:", plain)
-        self.assertIn("Paid:", plain)
+    def test_cd_navigation(self):
+        res_cd = self.engine.execute("cd src")
+        self.assertEqual(res_cd["exit_code"], 0)
+        self.assertEqual(self.engine.get_display_path(), "~/school-fee-system/src")
 
-    def test_invoices_list(self):
-        output = self.shell.execute("invoices list")
-        plain = _strip_ansi(output)
-        self.assertIn("FEE INVOICES", plain)
-        self.assertIn(self.test_invoice.invoice_number, plain)
+        # cd back to root
+        res_back = self.engine.execute("cd ~")
+        self.assertEqual(res_back["exit_code"], 0)
+        self.assertEqual(self.engine.get_display_path(), "~/school-fee-system")
 
-    def test_invoices_view(self):
-        output = self.shell.execute(f"invoices view {self.test_invoice.invoice_number}")
-        plain = _strip_ansi(output)
-        self.assertIn(f"INVOICE DETAILS: {self.test_invoice.invoice_number}", plain)
-        self.assertIn("Tuition Fee", plain)
-        self.assertIn("Total Payable:", plain)
+    def test_python_cli_help(self):
+        res = self.engine.execute("python -m school_fee_system --help")
+        self.assertEqual(res["exit_code"], 0)
+        self.assertIn("School Student Fee Management System", res["output"])
+        self.assertIn("students", res["output"])
+        self.assertIn("invoices", res["output"])
 
-    def test_pay_and_receipts_workflow(self):
-        # Record payment
-        pay_out = self.shell.execute(f"pay {self.test_invoice.id} 5000 UPI TX-SHELL-99 Admin")
-        plain_pay = _strip_ansi(pay_out)
-        self.assertIn("PAYMENT RECORDED SUCCESSFULLY", plain_pay)
-        self.assertIn("₹5,000.00", plain_pay)
-        self.assertIn("OFFICIAL FEE PAYMENT RECEIPT", plain_pay)
+    def test_python_cli_students_list(self):
+        res = self.engine.execute("python -m school_fee_system students list")
+        self.assertEqual(res["exit_code"], 0)
+        self.assertIn("Aarav Sharma", res["output"])
+        self.assertIn("Class 10-A", res["output"])
 
-        # View receipt
-        rec_out = self.shell.execute("receipts view REC-2026-0001")
-        plain_rec = _strip_ansi(rec_out)
-        self.assertIn("DELHI PUBLIC ACADEMY", plain_rec)
-        self.assertIn("REC-2026-0001", plain_rec)
+    def test_python_cli_defaulters(self):
+        res = self.engine.execute("python -m school_fee_system defaulters")
+        self.assertEqual(res["exit_code"], 0)
+        self.assertIn("DEFALUTERS LIST", res["output"])
 
-        # Verify receipt
-        ver_out = self.shell.execute("receipts verify REC-2026-0001")
-        plain_ver = _strip_ansi(ver_out)
-        self.assertIn("VERIFIED", plain_ver)
+    def test_python_inline_code(self):
+        res = self.engine.execute('python -c "print(40 + 2)"')
+        self.assertEqual(res["exit_code"], 0)
+        self.assertEqual(res["output"].strip(), "42")
 
-    def test_defaulters_command(self):
-        output = self.shell.execute("defaulters")
-        plain = _strip_ansi(output)
-        self.assertIn("FEE DEFAULTERS LIST", plain)
+    def test_plain_python_returns_friendly_repl_guide(self):
+        res = self.engine.execute("python")
+        self.assertEqual(res["exit_code"], 0)
+        self.assertIn("Interactive Python Mode Tip", res["output"])
 
-    def test_reports_collection_command(self):
-        output = self.shell.execute("reports collection")
-        plain = _strip_ansi(output)
-        self.assertIn("FINANCIAL REVENUE COLLECTION REPORT", plain)
-        self.assertIn("Total Collected:", plain)
+    def test_safety_filter_blocks_destructive_commands(self):
+        res_sudo = self.engine.execute("sudo rm -rf /")
+        self.assertEqual(res_sudo["exit_code"], 126)
+        self.assertIn("Permission denied", res_sudo["output"])
 
-    def test_unknown_command(self):
-        output = self.shell.execute("gibberish_command_xyz")
-        plain = _strip_ansi(output)
-        self.assertIn("Command not recognized", plain)
+    def test_banner_command(self):
+        res = self.engine.execute("banner")
+        self.assertEqual(res["exit_code"], 0)
+        self.assertIn("DELHI PUBLIC ACADEMY", res["output"])
 
 
 if __name__ == "__main__":
