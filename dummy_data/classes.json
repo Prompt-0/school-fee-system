@@ -1,0 +1,74 @@
+[
+  {
+    "id": 1,
+    "name": "Class 1-A",
+    "grade_level": 1,
+    "created_at": "2026-11-04 17:46:33"
+  },
+  {
+    "id": 2,
+    "name": "Class 1-B",
+    "grade_level": 1,
+    "created_at": "2026-11-04 17:46:33"
+  },
+  {
+    "id": 3,
+    "name": "Class 5-A",
+    "grade_level": 5,
+    "created_at": "2026-11-04 17:46:33"
+  },
+  {
+    "id": 4,
+    "name": "Class 5-B",
+    "grade_level": 5,
+    "created_at": "2026-11-04 17:46:33"
+  },
+  {
+    "id": 5,
+    "name": "Class 8-A",
+    "grade_level": 8,
+    "created_at": "2026-11-04 17:46:33"
+  },
+  {
+    "id": 6,
+    "name": "Class 9-A",
+    "grade_level": 9,
+    "created_at": "2026-11-04 17:46:33"
+  },
+  {
+    "id": 7,
+    "name": "Class 9-B",
+    "grade_level": 9,
+    "created_at": "2026-11-04 17:46:33"
+  },
+  {
+    "id": 8,
+    "name": "Class 10-A",
+    "grade_level": 10,
+    "created_at": "2026-11-04 17:46:33"
+  },
+  {
+    "id": 9,
+    "name": "Class 10-B",
+    "grade_level": 10,
+    "created_at": "2026-11-04 17:46:33"
+  },
+  {
+    "id": 10,
+    "name": "Class 11-Science",
+    "grade_level": 11,
+    "created_at": "2026-11-04 17:46:33"
+  },
+  {
+    "id": 11,
+    "name": "Class 11-Commerce",
+    "grade_level": 11,
+    "created_at": "2026-11-04 17:46:33"
+  },
+  {
+    "id": 12,
+    "name": "Class 12-Science",
+    "grade_level": 12,
+    "created_at": "2026-11-04 17:46:33"
+  }
+]
