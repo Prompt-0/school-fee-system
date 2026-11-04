@@ -1,6 +1,7 @@
 """
-Web-based Real Terminal Server for Delhi Public Academy Fee Management.
-Serves an in-browser Linux/Bash terminal sandbox for students to tinker with the Python CLI project.
+Web Terminal Server for Delhi Public Academy.
+Serves the in-browser bash & Python developer sandbox.
+Can run standalone or be mounted into the primary application server.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ import sys
 import urllib.parse
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from typing import Optional, Any
+from typing import Optional, Any, Dict
 
 from web_terminal.shell import RealTerminalEngine, TerminalShell
 
@@ -263,15 +264,36 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
     position: relative;
   }
   .term-input {
-    width: 100%;
+    flex: 1;
     background: transparent;
     border: none;
     outline: none;
     color: var(--text-main);
     font-family: inherit;
-    font-size: 16px; /* Avoid mobile browser zoom */
+    font-size: 16px; /* Avoid mobile browser auto-zoom */
     caret-color: var(--accent);
     padding: 0;
+    min-width: 0;
+  }
+  .submit-btn {
+    background: var(--accent);
+    color: #0b0f17;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.95rem;
+    font-weight: 900;
+    padding: 2px 10px;
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-left: 6px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .submit-btn:active {
+    opacity: 0.8;
+    transform: scale(0.95);
   }
 
   /* Mobile Quick Action Pill Bar */
@@ -301,6 +323,11 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+  .touch-pill.touch-primary {
+    background: var(--accent);
+    color: #0b0f17;
+    border-color: var(--accent);
   }
   .touch-pill:active {
     background: var(--accent);
@@ -368,11 +395,10 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
     font-size: 0.75rem;
     font-weight: 700;
     color: var(--text-muted);
-    text-transform: uppercase;
     margin-bottom: 0.35rem;
   }
   .mission-desc {
-    font-size: 0.8rem;
+    font-size: 0.77rem;
     color: var(--text-main);
     margin-bottom: 0.5rem;
     line-height: 1.35;
@@ -431,26 +457,32 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
     <!-- Output Log Container -->
     <main class="term-body" id="termBody" onclick="focusInput()">
       <div id="termHistory"></div>
-      <div class="prompt-row" id="activePromptRow">
+      
+      <!-- Command Input Form (handles Enter reliably across mobile virtual keyboards) -->
+      <form id="termForm" class="prompt-row" onsubmit="handleFormSubmit(event)">
         <span class="prompt-label" id="currentPromptLabel">
-          <span class="prompt-user">student</span><span class="prompt-at">@</span><span class="prompt-host">dpa-box</span><span class="prompt-colon">:</span><span class="prompt-path" id="promptPath">~/school-fee-system</span><span class="prompt-symbol">$</span>
+          <span class="prompt-user" id="promptUser">student</span><span class="prompt-at" id="promptAt">@</span><span class="prompt-host" id="promptHost">dpa-box</span><span class="prompt-colon" id="promptColon">:</span><span class="prompt-path" id="promptPath">~/school-fee-system</span><span class="prompt-symbol" id="promptSymbol">$</span>
         </span>
         <div class="input-wrapper">
           <input type="text" id="termInput" class="term-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" autofocus />
+          <button type="submit" class="submit-btn" id="submitBtn" title="Send (Enter)">↵</button>
         </div>
-      </div>
+      </form>
     </main>
 
     <!-- Mobile Quick Touch Pill Bar -->
     <nav class="touch-bar">
+      <button class="touch-pill touch-primary" onclick="submitCurrentInput()">↵ Enter</button>
+      <button class="touch-pill touch-primary" onclick="runDirectCmd('python main.py')">▶ python main.py</button>
+      <button class="touch-pill" onclick="runDirectCmd('python')">python (REPL)</button>
       <button class="touch-pill" onclick="handleTouchAction('TAB')">⇥ TAB</button>
       <button class="touch-pill" onclick="handleTouchAction('UP')">↑</button>
       <button class="touch-pill" onclick="handleTouchAction('DOWN')">↓</button>
+      <button class="touch-pill" onclick="runDirectCmd('1')">1 (Scholars)</button>
+      <button class="touch-pill" onclick="runDirectCmd('2')">2 (Invoices)</button>
+      <button class="touch-pill" onclick="runDirectCmd('4')">4 (Defaulters)</button>
+      <button class="touch-pill" onclick="runDirectCmd('0')">0 (Exit)</button>
       <button class="touch-pill" onclick="runDirectCmd('ls -la')">ls -la</button>
-      <button class="touch-pill" onclick="runDirectCmd('python -m school_fee_system --help')">--help</button>
-      <button class="touch-pill" onclick="runDirectCmd('python -m school_fee_system students list')">students</button>
-      <button class="touch-pill" onclick="runDirectCmd('python -m school_fee_system invoices list')">invoices</button>
-      <button class="touch-pill" onclick="runDirectCmd('python -m school_fee_system defaulters')">defaulters</button>
       <button class="touch-pill" onclick="runDirectCmd('python -m unittest discover tests')">run tests</button>
       <button class="touch-pill" onclick="runDirectCmd('clear')">clear</button>
     </nav>
@@ -464,7 +496,25 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
     </div>
     <div class="lab-body">
       <div class="mission-card">
-        <div class="mission-header"><span>Mission 1</span> <span>Filesystem</span></div>
+        <div class="mission-header"><span>Mission 1</span> <span>Interactive Project</span></div>
+        <div class="mission-desc">Run the student fee system interactive console with menus and payments!</div>
+        <div class="mission-cmd">
+          <code>python main.py</code>
+          <button class="btn-run" onclick="runDirectCmd('python main.py')">▶ Run</button>
+        </div>
+      </div>
+
+      <div class="mission-card">
+        <div class="mission-header"><span>Mission 2</span> <span>Interactive Python REPL</span></div>
+        <div class="mission-desc">Start a live Python prompt (>>>) to tinker with variables and code.</div>
+        <div class="mission-cmd">
+          <code>python</code>
+          <button class="btn-run" onclick="runDirectCmd('python')">▶ Run</button>
+        </div>
+      </div>
+
+      <div class="mission-card">
+        <div class="mission-header"><span>Mission 3</span> <span>Explore Files</span></div>
         <div class="mission-desc">Check out the project directory structure and files.</div>
         <div class="mission-cmd">
           <code>ls -la</code>
@@ -473,17 +523,8 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
       </div>
 
       <div class="mission-card">
-        <div class="mission-header"><span>Mission 2</span> <span>CLI Help</span></div>
-        <div class="mission-desc">Explore the CLI entrypoint commands and options.</div>
-        <div class="mission-cmd">
-          <code>python -m school_fee_system --help</code>
-          <button class="btn-run" onclick="runDirectCmd('python -m school_fee_system --help')">▶ Run</button>
-        </div>
-      </div>
-
-      <div class="mission-card">
-        <div class="mission-header"><span>Mission 3</span> <span>Pupils</span></div>
-        <div class="mission-desc">List all 43 active students in Delhi Public Academy.</div>
+        <div class="mission-header"><span>Mission 4</span> <span>Scholars Register</span></div>
+        <div class="mission-desc">List all 43 enrolled students in Delhi Public Academy.</div>
         <div class="mission-cmd">
           <code>python -m school_fee_system students list</code>
           <button class="btn-run" onclick="runDirectCmd('python -m school_fee_system students list')">▶ Run</button>
@@ -491,7 +532,7 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
       </div>
 
       <div class="mission-card">
-        <div class="mission-header"><span>Mission 4</span> <span>Invoices</span></div>
+        <div class="mission-header"><span>Mission 5</span> <span>Fee Invoices</span></div>
         <div class="mission-desc">Inspect generated student billing and fee invoices.</div>
         <div class="mission-cmd">
           <code>python -m school_fee_system invoices list</code>
@@ -500,7 +541,7 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
       </div>
 
       <div class="mission-card">
-        <div class="mission-header"><span>Mission 5</span> <span>Defaulters</span></div>
+        <div class="mission-header"><span>Mission 6</span> <span>Defaulters</span></div>
         <div class="mission-desc">Find accounts overdue past their 21-day grace period.</div>
         <div class="mission-cmd">
           <code>python -m school_fee_system defaulters</code>
@@ -509,7 +550,7 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
       </div>
 
       <div class="mission-card">
-        <div class="mission-header"><span>Mission 6</span> <span>Record Payment</span></div>
+        <div class="mission-header"><span>Mission 7</span> <span>Record Payment</span></div>
         <div class="mission-desc">Collect ₹5,000 for Invoice #1 via UPI and issue receipt.</div>
         <div class="mission-cmd">
           <code>python -m school_fee_system payments record --invoice-id 1 --amount 5000 --method UPI</code>
@@ -518,7 +559,7 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
       </div>
 
       <div class="mission-card">
-        <div class="mission-header"><span>Mission 7</span> <span>Audit Receipt</span></div>
+        <div class="mission-header"><span>Mission 8</span> <span>Audit Receipt</span></div>
         <div class="mission-desc">Verify cryptographic SHA-256 digital security seal.</div>
         <div class="mission-cmd">
           <code>python -m school_fee_system receipts verify REC-2026-0001</code>
@@ -527,20 +568,11 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
       </div>
 
       <div class="mission-card">
-        <div class="mission-header"><span>Mission 8</span> <span>Run Tests</span></div>
-        <div class="mission-desc">Execute all 20 automated unit tests using unittest.</div>
+        <div class="mission-header"><span>Mission 9</span> <span>Automated Tests</span></div>
+        <div class="mission-desc">Execute all 20 automated unit tests with unittest.</div>
         <div class="mission-cmd">
           <code>python -m unittest discover tests</code>
           <button class="btn-run" onclick="runDirectCmd('python -m unittest discover tests')">▶ Run</button>
-        </div>
-      </div>
-
-      <div class="mission-card">
-        <div class="mission-header"><span>Mission 9</span> <span>Python Script</span></div>
-        <div class="mission-desc">Write and run your own custom Python one-liner!</div>
-        <div class="mission-cmd">
-          <code>python -c "import school_fee_system; print('Python Ready!')"</code>
-          <button class="btn-run" onclick="runDirectCmd('python -c &quot;import school_fee_system; print(\'Python Ready!\')&quot;')">▶ Run</button>
         </div>
       </div>
     </div>
@@ -549,14 +581,12 @@ TERMINAL_PAGE_HTML = r"""<!DOCTYPE html>
 
 <script>
 const AUTO_COMMANDS = [
-  "ls -la", "pwd", "cat README.md", "cd src", "cd ..", "cd ~",
-  "python -m school_fee_system --help",
+  "python main.py", "python", "ls -la", "pwd", "cat README.md", "cd src", "cd ..", "cd ~",
   "python -m school_fee_system students list",
   "python -m school_fee_system invoices list",
   "python -m school_fee_system defaulters",
   "python -m school_fee_system reports collection",
   "python -m school_fee_system payments record --invoice-id 1 --amount 5000 --method UPI",
-  "python -m school_fee_system receipts view REC-2026-0001",
   "python -m school_fee_system receipts verify REC-2026-0001",
   "python -m unittest discover tests",
   "reset-db", "clear", "help"
@@ -568,14 +598,31 @@ let currentThemeIdx = 0;
 let history = JSON.parse(localStorage.getItem("real_term_history") || "[]");
 let historyIndex = history.length;
 
-let currentCwd = "~/school-fee-system";
+// Persistent session id per browser tab
+let sessionId = localStorage.getItem("dpa_term_session_id");
+if (!sessionId) {
+  sessionId = "sess_" + Math.random().toString(36).substring(2, 10);
+  localStorage.setItem("dpa_term_session_id", sessionId);
+}
+
+let currentPrompt = {
+  user: "student",
+  host: "dpa-box",
+  path: "~/school-fee-system",
+  symbol: "$"
+};
 
 const termBody = document.getElementById("termBody");
 const termHistory = document.getElementById("termHistory");
 const termInput = document.getElementById("termInput");
 const themeBtn = document.getElementById("themeBtn");
 const crtBtn = document.getElementById("crtBtn");
+const promptUser = document.getElementById("promptUser");
+const promptHost = document.getElementById("promptHost");
 const promptPath = document.getElementById("promptPath");
+const promptSymbol = document.getElementById("promptSymbol");
+const promptColon = document.getElementById("promptColon");
+const promptAt = document.getElementById("promptAt");
 const titleText = document.getElementById("titleText");
 const labSidebar = document.getElementById("labSidebar");
 
@@ -665,7 +712,26 @@ function escapeHtml(text) {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function appendToTerminal(cmd, output, pathStr) {
+function updatePromptUI(p) {
+  if (!p) return;
+  currentPrompt = p;
+  promptUser.textContent = p.user || "student";
+  promptHost.textContent = p.host || "dpa-box";
+  promptPath.textContent = p.path || "~/school-fee-system";
+  promptSymbol.textContent = p.symbol || "$";
+
+  if (p.user === "python" || p.user === "dpa") {
+    promptColon.style.display = "none";
+    promptAt.style.display = "none";
+  } else {
+    promptColon.style.display = "inline";
+    promptAt.style.display = "inline";
+  }
+
+  titleText.textContent = `${p.user}@${p.host}: ${p.path} — console`;
+}
+
+function appendToTerminal(cmd, output, promptObj) {
   if (output === "\033[2J\033[H") {
     termHistory.innerHTML = "";
     termBody.scrollTop = 0;
@@ -675,11 +741,14 @@ function appendToTerminal(cmd, output, pathStr) {
   const block = document.createElement("div");
   block.className = "term-output";
 
-  let displayCwd = pathStr || currentCwd;
+  const p = promptObj || currentPrompt;
+  const isSpecial = (p.user === "python" || p.user === "dpa");
+  const middle = isSpecial ? "" : `@${p.host}:`;
+
   let promptHtml = `
     <div class="prompt-row" style="margin-bottom: 2px;">
       <span class="prompt-label">
-        <span class="prompt-user">student</span><span class="prompt-at">@</span><span class="prompt-host">dpa-box</span><span class="prompt-colon">:</span><span class="prompt-path">${displayCwd}</span><span class="prompt-symbol">$</span>
+        <span class="prompt-user">${p.user}</span>${middle}<span class="prompt-path">${p.path}</span><span class="prompt-symbol">${p.symbol}</span>
       </span>
       <span style="font-weight: 600; color: #ffffff; margin-left: 0.35rem;">${escapeHtml(cmd)}</span>
     </div>
@@ -694,6 +763,8 @@ async function executeCommand(cmdStr) {
   const trimmed = cmdStr.trim();
   if (!trimmed) return;
 
+  const previousPrompt = Object.assign({}, currentPrompt);
+
   if (history[history.length - 1] !== trimmed) {
     history.push(trimmed);
     if (history.length > 100) history.shift();
@@ -701,33 +772,44 @@ async function executeCommand(cmdStr) {
   }
   historyIndex = history.length;
 
+  termInput.value = "";
+
   try {
     const res = await fetch("/api/exec", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cmd: trimmed })
+      body: JSON.stringify({ cmd: trimmed, session_id: sessionId })
     });
     const data = await res.json();
     
-    if (data.prompt && data.prompt.path) {
-      currentCwd = data.prompt.path;
-      promptPath.textContent = currentCwd;
-      titleText.textContent = `student@dpa-box: ${currentCwd} — bash`;
+    if (data.prompt) {
+      updatePromptUI(data.prompt);
     }
 
-    appendToTerminal(trimmed, data.output || "", currentCwd);
+    appendToTerminal(trimmed, data.output || "", previousPrompt);
   } catch (err) {
-    appendToTerminal(trimmed, `\033[31mSandbox Error: ${err.message}\033[0m\n`, currentCwd);
+    appendToTerminal(trimmed, `\033[31mSandbox Error: ${err.message}\033[0m\n`, previousPrompt);
   }
 
-  termInput.value = "";
   termBody.scrollTop = termBody.scrollHeight;
+  focusInput();
+}
+
+function handleFormSubmit(e) {
+  if (e) e.preventDefault();
+  submitCurrentInput();
+}
+
+function submitCurrentInput() {
+  const val = termInput.value;
+  if (val.trim()) {
+    executeCommand(val);
+  }
 }
 
 function runDirectCmd(cmd) {
   termInput.value = cmd;
   executeCommand(cmd);
-  focusInput();
 }
 
 function handleTouchAction(act) {
@@ -763,14 +845,14 @@ function triggerTabCompletion() {
     termInput.value = matches[0] + " ";
   } else if (matches.length > 1) {
     const suggestionText = "\n\033[38;2;148;163;184mSuggestions:\033[0m\n  " + matches.join("   ") + "\n";
-    appendToTerminal(current, suggestionText, currentCwd);
+    appendToTerminal(current, suggestionText, currentPrompt);
   }
 }
 
 termInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
-    executeCommand(termInput.value);
+    submitCurrentInput();
   } else if (e.key === "ArrowUp") {
     e.preventDefault();
     navigateHistory(-1);
@@ -782,7 +864,7 @@ termInput.addEventListener("keydown", (e) => {
     triggerTabCompletion();
   } else if (e.key === "c" && e.ctrlKey) {
     e.preventDefault();
-    appendToTerminal(termInput.value, "^C\n", currentCwd);
+    appendToTerminal(termInput.value, "^C\n", currentPrompt);
     termInput.value = "";
   } else if (e.key === "l" && e.ctrlKey) {
     e.preventDefault();
@@ -827,9 +909,12 @@ window.onload = async () => {
     const res = await fetch("/api/exec", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cmd: "banner" })
+      body: JSON.stringify({ cmd: "banner", session_id: sessionId })
     });
     const data = await res.json();
+    if (data.prompt) {
+      updatePromptUI(data.prompt);
+    }
     const initialBlock = document.createElement("div");
     initialBlock.className = "term-output";
     initialBlock.innerHTML = `<pre>${ansiToHtml(data.output || "")}</pre>`;
@@ -847,15 +932,22 @@ window.onload = async () => {
 
 
 class WebTerminalHandler(SimpleHTTPRequestHandler):
-    def __init__(self, *args, engine: RealTerminalEngine, **kwargs):
-        self.engine = engine
+    _sessions: Dict[str, RealTerminalEngine] = {}
+
+    def __init__(self, *args, project_root: Optional[str] = None, **kwargs):
+        self.project_root = project_root
         super().__init__(*args, **kwargs)
+
+    def _get_engine(self, session_id: str) -> RealTerminalEngine:
+        if session_id not in WebTerminalHandler._sessions:
+            WebTerminalHandler._sessions[session_id] = RealTerminalEngine(project_root=self.project_root)
+        return WebTerminalHandler._sessions[session_id]
 
     def do_GET(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
 
-        if path in ("/", "/index.html", "/terminal"):
+        if path in ("/", "/index.html", "/terminal", "/terminal/"):
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
@@ -874,7 +966,9 @@ class WebTerminalHandler(SimpleHTTPRequestHandler):
             try:
                 data = json.loads(body)
                 cmd = data.get("cmd", "")
-                result = self.engine.execute(cmd)
+                session_id = data.get("session_id", "default")
+                engine = self._get_engine(session_id)
+                result = engine.execute(cmd)
                 self._send_json(result)
             except Exception as exc:
                 self._send_json({"error": str(exc), "exit_code": 1}, status=HTTPStatus.BAD_REQUEST)
@@ -900,10 +994,8 @@ def run_terminal_server(
     if port is None:
         port = int(os.environ.get("PORT", 8080))
 
-    engine = RealTerminalEngine(project_root=project_root)
-
     def factory(*args, **kwargs):
-        return WebTerminalHandler(*args, engine=engine, **kwargs)
+        return WebTerminalHandler(*args, project_root=project_root, **kwargs)
 
     server = ThreadingHTTPServer((host, port), factory)
     print(f"\n💻 Delhi Public Academy Real Terminal Sandbox running at:")

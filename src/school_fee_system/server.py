@@ -1621,18 +1621,23 @@ class FeeServerHandler(SimpleHTTPRequestHandler):
         try:
             if path == "/api/exec":
                 try:
-                    from web_terminal.shell import TerminalShell
+                    from web_terminal.shell import RealTerminalEngine
                 except ImportError:
                     proj_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
                     for p in (proj_root, os.path.join(proj_root, "src")):
                         if p not in sys.path:
                             sys.path.insert(0, p)
-                    from web_terminal.shell import TerminalShell
+                    from web_terminal.shell import RealTerminalEngine
 
-                if not hasattr(self, "_shell") or self._shell is None:
-                    self._shell = TerminalShell()
+                session_id = payload.get("session_id", "default")
+                if not hasattr(FeeServerHandler, "_term_sessions"):
+                    FeeServerHandler._term_sessions = {}
+                if session_id not in FeeServerHandler._term_sessions:
+                    FeeServerHandler._term_sessions[session_id] = RealTerminalEngine()
+
+                shell = FeeServerHandler._term_sessions[session_id]
                 cmd = payload.get("cmd", "")
-                result = self._shell.execute(cmd)
+                result = shell.execute(cmd)
                 self._send_json(result)
                 return
 
