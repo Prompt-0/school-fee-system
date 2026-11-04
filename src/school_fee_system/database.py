@@ -18,6 +18,12 @@ DEFAULT_DB_PATH = os.path.expanduser("~/.local/share/school_fee_system/fees.db")
 def get_db_path(custom_path: Optional[str] = None) -> str:
     path = custom_path or os.environ.get("SCHOOL_FEE_DB_PATH")
     if not path:
+        # If project-level data/fees.db exists, prioritize it for seamless local/demo usage
+        project_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        project_db = os.path.join(project_dir, "data", "fees.db")
+        if os.path.exists(project_db):
+            return project_db
+
         candidate = DEFAULT_DB_PATH
         try:
             os.makedirs(os.path.dirname(os.path.abspath(candidate)), exist_ok=True)
@@ -29,8 +35,7 @@ def get_db_path(custom_path: Optional[str] = None) -> str:
             path = candidate
         except (OSError, PermissionError):
             # Fallback to project-level data directory
-            project_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            path = os.path.join(project_dir, "data", "fees.db")
+            path = project_db
             os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     else:
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
