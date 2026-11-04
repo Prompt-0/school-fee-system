@@ -6,6 +6,7 @@ Supports ACID transactions, WAL mode, foreign keys, and pre-populated seed data.
 from __future__ import annotations
 
 import os
+import shutil
 import sqlite3
 from contextlib import contextmanager
 from decimal import Decimal
@@ -18,9 +19,18 @@ DEFAULT_DB_PATH = os.path.expanduser("~/.local/share/school_fee_system/fees.db")
 def get_db_path(custom_path: Optional[str] = None) -> str:
     path = custom_path or os.environ.get("SCHOOL_FEE_DB_PATH")
     if not path:
-        # If project-level data/fees.db exists, prioritize it for seamless local/demo usage
+        # If project-level data/fees.db exists or demo db is available, prioritize it
         project_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         project_db = os.path.join(project_dir, "data", "fees.db")
+        demo_db = os.path.join(project_dir, "dummy_data", "delhi_public_academy_demo.db")
+
+        if not os.path.exists(project_db) and os.path.exists(demo_db):
+            try:
+                os.makedirs(os.path.dirname(project_db), exist_ok=True)
+                shutil.copyfile(demo_db, project_db)
+            except (OSError, PermissionError):
+                return demo_db
+
         if os.path.exists(project_db):
             return project_db
 

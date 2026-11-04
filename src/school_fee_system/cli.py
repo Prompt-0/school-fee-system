@@ -426,8 +426,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     # 9. serve
     p_srv = subparsers.add_parser("serve", help="Launch integrated Web Dashboard & REST API server")
-    p_srv.add_argument("--port", type=int, default=8000, help="Port to listen on (default: 8000)")
-    p_srv.add_argument("--host", default="127.0.0.1", help="Host address (default: 127.0.0.1)")
+    p_srv.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("PORT", 8000)),
+        help="Port to listen on (default: 8000 or $PORT env)",
+    )
+    p_srv.add_argument(
+        "--host",
+        default=os.environ.get("HOST", "127.0.0.1"),
+        help="Host address (default: 127.0.0.1 or $HOST env)",
+    )
 
     return parser
 

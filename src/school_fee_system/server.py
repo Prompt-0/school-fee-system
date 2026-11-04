@@ -1664,7 +1664,14 @@ class FeeServerHandler(SimpleHTTPRequestHandler):
         self.wfile.write(raw)
 
 
-def run_server(host: str = "127.0.0.1", port: int = 8000, db_path: Optional[str] = None) -> None:
+def run_server(
+    host: Optional[str] = None,
+    port: Optional[int] = None,
+    db_path: Optional[str] = None,
+) -> None:
+    host = host or os.environ.get("HOST", "127.0.0.1")
+    if port is None:
+        port = int(os.environ.get("PORT", 8000))
     service = SchoolFeeService(db_path=db_path)
     # Ensure database schema and seed data exist
     conn = service._get_connection()
