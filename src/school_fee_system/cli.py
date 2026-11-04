@@ -6,6 +6,7 @@ Built with standard library argparse with formatted tabular output.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from datetime import date
 from decimal import Decimal
