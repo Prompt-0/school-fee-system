@@ -10,7 +10,7 @@ import os
 import sys
 from datetime import date
 from decimal import Decimal
-from typing import List, Optional
+from typing import List
 
 from school_fee_system.database import connect_db, initialize_schema, seed_sample_data, get_db_path
 from school_fee_system.models import Student, StudentStatus, FeeTerm, InvoiceStatus, PaymentMethod

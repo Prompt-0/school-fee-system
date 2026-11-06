@@ -16,10 +16,8 @@ from typing import List, Optional
 from school_fee_system.models import (
     Student,
     FeeStructure,
-    FeeStructureItem,
     DiscountPolicy,
     DiscountType,
-    InvoiceItem,
 )
 
 

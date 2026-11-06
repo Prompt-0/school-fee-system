@@ -9,7 +9,6 @@ import os
 import shutil
 import sqlite3
 from contextlib import contextmanager
-from decimal import Decimal
 from typing import Generator, Optional
 
 

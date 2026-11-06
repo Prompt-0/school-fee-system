@@ -6,12 +6,10 @@ Provides a modern, responsive single-page administration interface along with JS
 from __future__ import annotations
 
 import json
-import urllib.parse
-from datetime import date
 from decimal import Decimal
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from school_fee_system.database import initialize_schema, seed_sample_data
 from school_fee_system.models import FeeTerm, InvoiceStatus, PaymentMethod, Student, StudentStatus

@@ -6,14 +6,13 @@ Uses standard library unittest with in-memory or temporary SQLite database.
 import os
 import tempfile
 import unittest
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 
 from school_fee_system.database import connect_db, initialize_schema, seed_sample_data
 from school_fee_system.fee_calculator import FeeCalculator, round_currency
 from school_fee_system.models import (
     Student,
-    StudentStatus,
     FeeStructure,
     FeeStructureItem,
     FeeTerm,
@@ -23,8 +22,6 @@ from school_fee_system.models import (
     PaymentMethod,
 )
 from school_fee_system.receipt_generator import (
-    ReceiptFormatter,
-    compute_receipt_hash,
     verify_receipt_hash,
 )
 from school_fee_system.services import SchoolFeeService
