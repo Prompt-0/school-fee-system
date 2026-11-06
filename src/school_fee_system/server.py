@@ -670,7 +670,6 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         <li><button class="nav-item active" onclick="switchTab('dashboard')"><span>📊</span> Accounts Dashboard</button></li>
         <li><button class="nav-item" onclick="switchTab('students')"><span>🧑‍🎓</span> Scholar Register</button></li>
         <li><button class="nav-item" onclick="switchTab('invoices')"><span>🧾</span> Fee Invoices & Dues</button></li>
-        <li><a href="/terminal" class="nav-item" style="text-decoration: none; color: inherit;"><span>💻</span> Interactive Web Terminal</a></li>
         <li><button class="nav-item" onclick="switchTab('terminal')"><span>💳</span> Fee Collection Desk</button></li>
         <li><button class="nav-item" onclick="switchTab('defaulters')"><span>⚠️</span> Overdue Defaulters</button></li>
         <li><button class="nav-item" onclick="switchTab('reports')"><span>📈</span> Collection Register</button></li>
@@ -693,7 +692,6 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         </div>
       </div>
       <div style="display: flex; gap: 0.5rem; align-items: center;">
-        <a href="/terminal" class="btn btn-outline btn-sm" style="text-decoration: none;" title="Open In-Browser Web Terminal Console">💻 Terminal</a>
         <button class="btn btn-primary btn-sm" onclick="openPaymentModal()">+ Collect Fee</button>
       </div>
     </header>
@@ -1444,22 +1442,6 @@ class FeeServerHandler(SimpleHTTPRequestHandler):
             self.wfile.write(DASHBOARD_HTML.encode("utf-8"))
             return
 
-        # 1.5 Interactive Web Terminal Console
-        if path in ("/terminal", "/terminal/"):
-            try:
-                from web_terminal.server import TERMINAL_PAGE_HTML
-            except ImportError:
-                proj_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                for p in (proj_root, os.path.join(proj_root, "src")):
-                    if p not in sys.path:
-                        sys.path.insert(0, p)
-                from web_terminal.server import TERMINAL_PAGE_HTML
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(TERMINAL_PAGE_HTML.encode("utf-8"))
-            return
-
         # 2. REST API: KPIs
         if path == "/api/kpis":
             kpis = self.service.get_kpis()
@@ -1619,28 +1601,6 @@ class FeeServerHandler(SimpleHTTPRequestHandler):
             return
 
         try:
-            if path == "/api/exec":
-                try:
-                    from web_terminal.shell import RealTerminalEngine
-                except ImportError:
-                    proj_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                    for p in (proj_root, os.path.join(proj_root, "src")):
-                        if p not in sys.path:
-                            sys.path.insert(0, p)
-                    from web_terminal.shell import RealTerminalEngine
-
-                session_id = payload.get("session_id", "default")
-                if not hasattr(FeeServerHandler, "_term_sessions"):
-                    FeeServerHandler._term_sessions = {}
-                if session_id not in FeeServerHandler._term_sessions:
-                    FeeServerHandler._term_sessions[session_id] = RealTerminalEngine()
-
-                shell = FeeServerHandler._term_sessions[session_id]
-                cmd = payload.get("cmd", "")
-                result = shell.execute(cmd)
-                self._send_json(result)
-                return
-
             if path == "/api/students":
                 new_stu = Student(
                     student_id=payload["student_id"],
